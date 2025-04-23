@@ -44,9 +44,6 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh
 RUN mkdir -p /root/.config/code-server
 COPY code-server-config.yaml /root/.config/code-server/config.yaml
 
-# Pythonの拡張機能をプリインストール
-RUN code-server --install-extension ms-python.python
-
 # 作業ディレクトリの作成
 WORKDIR /workspace
 
