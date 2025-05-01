@@ -12,6 +12,7 @@
 - **自動管理**: ファイル変更検知による自動リビルド機能
 - **永続データ**: 再起動時も拡張機能やライブラリを保持
 - **自動バックアップ**: 定期的なバックアップによるデータ保護
+- **環境復元**: 再起動時に前回のバックアップから自動復元
 
 ## セットアップ手順
 
@@ -52,17 +53,28 @@ EOL
 
 - 6時間ごとの自動バックアップ（30日間保持）
 - JupyterLabとCode-Serverの両方が自動起動
+- 前回のバックアップからの自動復元
 - すべてのユーザー入力をスキップ
 
 これは、Launch Agent経由での自動起動や、スクリプトでの呼び出しに最適です。例えば、Mac起動時に自動的に環境を立ち上げる場合は以下のようにLaunch Agentを設定できます：
 
 ```xml
-ProgramArguments
-
-    /bin/bash
-    -c
-    cd /path/to/repo && ./start-container.sh --auto
-
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.yourname.ml-env</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>cd /path/to/repo && ./start-container.sh --auto</string>
+    </array>
+</dict>
+</plist>
 ```
 
 ### ファイルと役割
@@ -88,20 +100,21 @@ ProgramArguments
    - Code-Server: `http://[Macのアドレス]:8080`
    - 初期パスワード: `password`
 
-## 自動バックアップ機能
+## 自動バックアップと復元機能
 
 突然のシャットダウンや電源喪失からデータを保護するため、自動バックアップ機能があります：
 
 - **スケジュール設定**: コンテナ起動時に自動バックアップの間隔を設定できます
 - **デフォルト設定**: 6時間ごとのバックアップ、30日間保持
+- **自動復元**: コンテナ再起動時に最新のバックアップから環境を復元
 - **手動での調整**: 
-  ```bash
-  # カスタム間隔と保持期間の設定（例：12時間ごと、7日間保持）
-  ./schedule-backup.sh 12 7
-  
-  # 自動バックアップを無効化
-  ./schedule-backup.sh 0
-  ```
+```bash
+# カスタム間隔と保持期間の設定（例：12時間ごと、7日間保持）
+./schedule-backup.sh 12 7
+
+# 自動バックアップを無効化
+./schedule-backup.sh 0
+```
 
 ## 手動バックアップと復元
 
@@ -115,6 +128,11 @@ ProgramArguments
 ./backup-restore.sh restore ./backups/ml_env_backup_20250410_120000.tar.gz
 ```
 
+バックアップには以下の情報が含まれます：
+- インストール済みのPythonパッケージリスト
+- インストール済みのVS Code拡張機能リスト
+- コマンド履歴
+
 ## データの永続性
 
 以下のデータは Docker ボリュームによって永続化されます：
@@ -124,15 +142,18 @@ ProgramArguments
 - pip キャッシュ
 - Python ライブラリ
 
-これにより、コンテナを再起動または再作成しても、インストールした拡張機能やライブラリが保持されます。
+これにより、コンテナを再起動または再作成しても、インストールした拡張機能やライブラリが保持されます。また、バックアップと復元機能により、万が一データが破損した場合でも前の状態に戻すことができます。
 
 ## よくある操作
 
-### 環境の再起動
+### 環境の起動/再起動と自動復元
 
 ```bash
-# 環境を起動/再起動
+# 環境を起動/再起動（最新バックアップから復元するか確認）
 ./start-container.sh
+
+# 環境を起動/再起動（自動的に最新バックアップから復元）
+./start-container.sh --auto
 ```
 
 ### Jupyter Labだけを起動
@@ -195,23 +216,42 @@ cert: false
 
 ```bash
 # Dockerログを確認
-docker-compose logs
+/usr/local/bin/docker-compose logs
 
 # コンテナを強制的に再ビルド
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
+/usr/local/bin/docker-compose down
+/usr/local/bin/docker-compose build --no-cache
+/usr/local/bin/docker-compose up -d
 ```
 
 ### Code-Serverにアクセスできない場合
 
 ```bash
 # Code-Serverの状態を確認
-docker-compose exec ml_env ps aux | grep code-server
+/usr/local/bin/docker-compose exec ml_env ps aux | grep code-server
 
 # 手動で再起動
-docker-compose exec ml_env pkill code-server
+/usr/local/bin/docker-compose exec ml_env pkill code-server
 ./start-code-server.sh
+```
+
+### docker-composeコマンドでエラーが出る場合
+
+スクリプト内では`/usr/local/bin/docker-compose`のパスを使用しています。異なるパスにインストールされている場合は、各スクリプト内のDOCKER_COMPOSE変数を修正してください：
+
+```bash
+# docker-composeの絶対パスを指定
+DOCKER_COMPOSE="/正しいパス/docker-compose"
+```
+
+### バックアップからの復元に失敗する場合
+
+```bash
+# バックアップファイルの内容を確認
+tar -tvf ./backups/ml_env_backup_YYYYMMDD_HHMMSS.tar.gz
+
+# 手動で復元を試みる
+./backup-restore.sh restore ./backups/ml_env_backup_YYYYMMDD_HHMMSS.tar.gz
 ```
 
 ## ライセンス
