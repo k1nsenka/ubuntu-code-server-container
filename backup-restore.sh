@@ -6,11 +6,11 @@
 # エラーが発生した時点でスクリプトを終了
 set -e
 
-# docker-composeの絶対パスを指定
-DOCKER_COMPOSE="/usr/local/bin/docker-compose"
-
 # スクリプトの実行ディレクトリに移動
 cd "$(dirname "$0")"
+
+# docker-composeの絶対パスを指定
+DOCKER_COMPOSE="/usr/local/bin/docker-compose"
 
 # バックアップディレクトリ
 BACKUP_DIR="./backups"
@@ -92,30 +92,39 @@ restore() {
         sleep 5
     fi
     
-    # 要件ファイルが存在する場合、Pythonパッケージをインストール
+    # コンテナ内にファイルをコピーする一時ディレクトリを作成
+    $DOCKER_COMPOSE exec "$CONTAINER_NAME" mkdir -p /tmp/restore
+    
+    # 要件ファイルが存在する場合、コンテナにコピーしてからPythonパッケージをインストール
     local req_file=$(find "$temp_dir" -name "requirements_*.txt" | sort | tail -n 1)
     if [ -n "$req_file" ]; then
-        echo "Restoring Python packages..."
-        $DOCKER_COMPOSE exec "$CONTAINER_NAME" pip install -r /workspace/$(basename "$req_file")
+        echo "Restoring Python packages from $(basename "$req_file")..."
+        # ファイルをコンテナにコピー
+        docker cp "$req_file" "$CONTAINER_NAME:/tmp/restore/requirements.txt"
+        # コンテナ内でインストール
+        $DOCKER_COMPOSE exec "$CONTAINER_NAME" pip install -r /tmp/restore/requirements.txt
     fi
     
     # 拡張機能リストが存在する場合、VSCode拡張機能をインストール
     local ext_file=$(find "$temp_dir" -name "extensions_*.txt" | sort | tail -n 1)
     if [ -n "$ext_file" ]; then
         echo "Restoring VS Code extensions..."
-        while read extension; do
-            [ -z "$extension" ] && continue
-            echo "Installing extension: $extension"
-            $DOCKER_COMPOSE exec "$CONTAINER_NAME" code-server --install-extension "$extension"
-        done < "$ext_file"
+        # ファイルをコンテナにコピー
+        docker cp "$ext_file" "$CONTAINER_NAME:/tmp/restore/extensions.txt"
+        # 各拡張機能をインストール
+        $DOCKER_COMPOSE exec "$CONTAINER_NAME" bash -c "while read extension; do [ -z \"\$extension\" ] && continue; echo \"Installing extension: \$extension\"; code-server --install-extension \"\$extension\"; done < /tmp/restore/extensions.txt"
     fi
     
     # バッシュ履歴の復元
     local hist_file=$(find "$temp_dir" -name "bash_history_*.txt" | sort | tail -n 1)
     if [ -n "$hist_file" ]; then
         echo "Restoring bash history..."
-        $DOCKER_COMPOSE exec "$CONTAINER_NAME" bash -c "cat > ~/.bash_history" < "$hist_file"
+        docker cp "$hist_file" "$CONTAINER_NAME:/tmp/restore/bash_history.txt"
+        $DOCKER_COMPOSE exec "$CONTAINER_NAME" bash -c "cat /tmp/restore/bash_history.txt > ~/.bash_history"
     fi
+    
+    # 一時ディレクトリのクリーンアップ
+    $DOCKER_COMPOSE exec "$CONTAINER_NAME" rm -rf /tmp/restore
     
     echo "Restoration completed."
 }

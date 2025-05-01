@@ -3,6 +3,9 @@
 # エラーが発生した時点でスクリプトを終了
 set -e
 
+# docker-composeの絶対パスを指定
+DOCKER_COMPOSE="/usr/local/bin/docker-compose"
+
 # 自動モードフラグ
 AUTO_MODE=false
 
@@ -125,7 +128,7 @@ cleanup_images() {
 
 # コンテナの状態確認
 container_status() {
-    docker-compose ps --quiet ml_env
+    $DOCKER_COMPOSE ps --quiet ml_env
 }
 
 # Dockerファイルのハッシュを計算
@@ -154,20 +157,20 @@ update_hash() {
 # シェルの設定を更新
 setup_shell() {
     echo "Setting up colored shell prompt..."
-    docker-compose exec ml_env bash -c "echo '$BASHRC_CONTENT' > ~/.bashrc"
+    $DOCKER_COMPOSE exec ml_env bash -c "echo '$BASHRC_CONTENT' > ~/.bashrc"
 }
 
 # Jupyterの起動
 start_jupyter() {
     echo "Starting JupyterLab..."
-    docker-compose exec -d ml_env bash -c "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token=''"
+    $DOCKER_COMPOSE exec -d ml_env bash -c "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token=''"
     echo "JupyterLab started. Access at http://localhost:8888"
 }
 
 # Code-Serverの起動
 start_code_server() {
     echo "Starting Code-Server..."
-    docker-compose exec -d ml_env bash -c "code-server --bind-addr 0.0.0.0:8080 /workspace"
+    $DOCKER_COMPOSE exec -d ml_env bash -c "code-server --bind-addr 0.0.0.0:8080 /workspace"
     echo "Code-Server started. Access at http://localhost:8080"
     echo "Default password: password (configured in code-server-config.yaml)"
 }
@@ -239,8 +242,8 @@ main() {
     # Dockerファイルの変更をチェック
     if check_files_changed; then
         echo "Docker files have changed. Rebuilding container..."
-        docker-compose down
-        docker-compose build
+        $DOCKER_COMPOSE down
+        $DOCKER_COMPOSE build
         update_hash
         echo "Rebuild complete."
         
@@ -253,7 +256,7 @@ main() {
     # コンテナが存在するか確認
     if [ -z "$(container_status)" ]; then
         echo "Container not found. Starting new container..."
-        docker-compose up -d
+        $DOCKER_COMPOSE up -d
         
         # コンテナの起動を待機
         echo "Waiting for container to be ready..."
@@ -263,9 +266,9 @@ main() {
         setup_shell
     else
         # コンテナが停止している場合は起動
-        if ! docker-compose ps | grep -q "Up" | grep "ml_env"; then
+        if ! $DOCKER_COMPOSE ps | grep -q "Up" | grep "ml_env"; then
             echo "Container exists but is not running. Starting container..."
-            docker-compose start
+            $DOCKER_COMPOSE start
             sleep 5
         fi
     fi
@@ -353,7 +356,7 @@ main() {
     fi
     
     echo "Connecting to container..."
-    docker-compose exec ml_env /bin/bash --login
+    $DOCKER_COMPOSE exec ml_env /bin/bash --login
 }
 
 # スクリプト実行

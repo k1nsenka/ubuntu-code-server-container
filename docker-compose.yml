@@ -1,6 +1,7 @@
 services:
     ml_env:
         hostname: ml_env
+        container_name: ml_env 
         image: ml-amd64
         build: .
         volumes:

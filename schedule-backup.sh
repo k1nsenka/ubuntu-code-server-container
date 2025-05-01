@@ -9,6 +9,9 @@ set -e
 # スクリプトの実行ディレクトリに移動
 cd "$(dirname "$0")"
 
+# docker-composeの絶対パスを指定
+DOCKER_COMPOSE="/usr/local/bin/docker-compose"
+
 # スクリプトへの絶対パス
 BACKUP_SCRIPT="$(pwd)/backup-restore.sh"
 CLEANUP_SCRIPT="$(pwd)/cleanup-old-backups.sh"
