@@ -66,6 +66,33 @@ EOL
     done
 }
 
+# 最新のバックアップファイルを見つける
+find_latest_backup() {
+    local latest_backup=$(find "./backups" -name "ml_env_backup_*.tar.gz" -type f | sort -r | head -n 1)
+    echo "$latest_backup"
+}
+
+# 環境を復元する
+restore_environment() {
+    local latest_backup=$1
+    
+    if [ -z "$latest_backup" ] || [ ! -f "$latest_backup" ]; then
+        echo "有効なバックアップファイルが見つかりません。新規環境として起動します。"
+        return 1
+    fi
+    
+    echo "前回の環境を復元しています: $latest_backup"
+    ./backup-restore.sh restore "$latest_backup"
+    
+    if [ $? -eq 0 ]; then
+        echo "環境の復元が完了しました。"
+        return 0
+    else
+        echo "環境の復元に失敗しました。新規環境として起動します。"
+        return 1
+    fi
+}
+
 # bashrcの設定内容
 BASHRC_CONTENT='
 # カラー設定
@@ -249,11 +276,36 @@ main() {
         exit 1
     fi
     
-    # 自動バックアップのセットアップ
     # バックアップスクリプトに実行権限があるか確認
-    if [ -f "./backup-restore.sh" ] && [ -f "./schedule-backup.sh" ]; then
-        if [ ! -x "./backup-restore.sh" ] || [ ! -x "./schedule-backup.sh" ]; then
-            chmod +x ./backup-restore.sh ./schedule-backup.sh
+    if [ -f "./backup-restore.sh" ]; then
+        if [ ! -x "./backup-restore.sh" ]; then
+            chmod +x ./backup-restore.sh
+        fi
+        
+        # 最新のバックアップがあれば復元する
+        latest_backup=$(find_latest_backup)
+        if [ ! -z "$latest_backup" ]; then
+            if [ "$AUTO_MODE" = true ]; then
+                # 自動モードでは自動的に復元
+                restore_environment "$latest_backup"
+            else
+                # 対話モードでは確認を取る
+                read -p "前回のバックアップから環境を復元しますか？ [Y/n]: " RESTORE_ENV
+                if [[ ! "$RESTORE_ENV" =~ ^[Nn]$ ]]; then
+                    restore_environment "$latest_backup"
+                else
+                    echo "環境の復元をスキップします。"
+                fi
+            fi
+        else
+            echo "利用可能なバックアップが見つかりません。新規環境として起動します。"
+        fi
+    fi
+    
+    # 自動バックアップのセットアップ
+    if [ -f "./schedule-backup.sh" ]; then
+        if [ ! -x "./schedule-backup.sh" ]; then
+            chmod +x ./schedule-backup.sh
         fi
         
         # 自動モードの場合はデフォルト設定を使用

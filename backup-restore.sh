@@ -6,6 +6,9 @@
 # エラーが発生した時点でスクリプトを終了
 set -e
 
+# docker-composeの絶対パスを指定
+DOCKER_COMPOSE="/usr/local/bin/docker-compose"
+
 # スクリプトの実行ディレクトリに移動
 cd "$(dirname "$0")"
 
@@ -25,23 +28,23 @@ backup() {
     echo "Creating backup of container environment..."
     
     # コンテナ起動チェック
-    if ! docker-compose ps | grep -q "Up" | grep "$CONTAINER_NAME"; then
+    if ! $DOCKER_COMPOSE ps | grep -q "Up" | grep "$CONTAINER_NAME"; then
         echo "Container is not running. Starting container..."
-        docker-compose start
+        $DOCKER_COMPOSE start
         sleep 5
     fi
     
     # インストール済みPythonパッケージのリストを取得
     echo "Listing installed Python packages..."
-    docker-compose exec "$CONTAINER_NAME" pip freeze > "${BACKUP_DIR}/requirements_${BACKUP_TIMESTAMP}.txt"
+    $DOCKER_COMPOSE exec "$CONTAINER_NAME" pip freeze > "${BACKUP_DIR}/requirements_${BACKUP_TIMESTAMP}.txt"
     
     # VSCode拡張機能のリストを取得
     echo "Listing installed VS Code extensions..."
-    docker-compose exec "$CONTAINER_NAME" code-server --list-extensions > "${BACKUP_DIR}/extensions_${BACKUP_TIMESTAMP}.txt"
+    $DOCKER_COMPOSE exec "$CONTAINER_NAME" code-server --list-extensions > "${BACKUP_DIR}/extensions_${BACKUP_TIMESTAMP}.txt"
     
     # バッシュ履歴のバックアップ
     echo "Backing up bash history..."
-    docker-compose exec "$CONTAINER_NAME" bash -c "cat ~/.bash_history 2>/dev/null || echo ''" > "${BACKUP_DIR}/bash_history_${BACKUP_TIMESTAMP}.txt"
+    $DOCKER_COMPOSE exec "$CONTAINER_NAME" bash -c "cat ~/.bash_history 2>/dev/null || echo ''" > "${BACKUP_DIR}/bash_history_${BACKUP_TIMESTAMP}.txt"
     
     # Dockerボリュームのバックアップは通常必要ありませんが、
     # 必要な場合は以下のコメントを解除
@@ -83,9 +86,9 @@ restore() {
     tar -xzf "$backup_file" -C "$temp_dir"
     
     # コンテナ起動チェック
-    if ! docker-compose ps | grep -q "Up" | grep "$CONTAINER_NAME"; then
+    if ! $DOCKER_COMPOSE ps | grep -q "Up" | grep "$CONTAINER_NAME"; then
         echo "Container is not running. Starting container..."
-        docker-compose start
+        $DOCKER_COMPOSE start
         sleep 5
     fi
     
@@ -93,7 +96,7 @@ restore() {
     local req_file=$(find "$temp_dir" -name "requirements_*.txt" | sort | tail -n 1)
     if [ -n "$req_file" ]; then
         echo "Restoring Python packages..."
-        docker-compose exec "$CONTAINER_NAME" pip install -r /workspace/$(basename "$req_file")
+        $DOCKER_COMPOSE exec "$CONTAINER_NAME" pip install -r /workspace/$(basename "$req_file")
     fi
     
     # 拡張機能リストが存在する場合、VSCode拡張機能をインストール
@@ -103,7 +106,7 @@ restore() {
         while read extension; do
             [ -z "$extension" ] && continue
             echo "Installing extension: $extension"
-            docker-compose exec "$CONTAINER_NAME" code-server --install-extension "$extension"
+            $DOCKER_COMPOSE exec "$CONTAINER_NAME" code-server --install-extension "$extension"
         done < "$ext_file"
     fi
     
@@ -111,7 +114,7 @@ restore() {
     local hist_file=$(find "$temp_dir" -name "bash_history_*.txt" | sort | tail -n 1)
     if [ -n "$hist_file" ]; then
         echo "Restoring bash history..."
-        docker-compose exec "$CONTAINER_NAME" bash -c "cat > ~/.bash_history" < "$hist_file"
+        $DOCKER_COMPOSE exec "$CONTAINER_NAME" bash -c "cat > ~/.bash_history" < "$hist_file"
     fi
     
     echo "Restoration completed."
